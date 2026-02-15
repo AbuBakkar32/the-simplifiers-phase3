@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>THE SIMPLIFIERS — 4 Step-wise Animated Plots (Venice)</title>
+    <link rel="stylesheet" href="assets/style.css"/>
+    <style>
+        .grid {
+            display: grid;
+            grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
+            gap: 14px
+        }
+
+        .cardlink {
+            display: block;
+            padding: 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, .14);
+            text-decoration: none
+        }
+
+        .cardlink:hover {
+            transform: translateY(-1px)
+        }
+
+        .small {
+            opacity: .9
+        }
+    </style>
+</head>
+<body>
+<header>
+    <h1>THE SIMPLIFIERS — 4 Step-wise Animated Plots (Venice)</h1>
+    <h1 style="color: aquamarine">Abu Bakkar Siddikk-908592</h1>
+    <p class="small">All animations and sliders are <b>Step 1–66</b> (no segments). Clean for presentation.</p>
+</header>
+<main>
+    <div class="grid">
+        <a class="cardlink" href="w1_3d_helix_route.html"><b>W1</b> 3D Helix Route Reveal<br><span class="small">step-by-step + rotating camera</span></a>
+        <a class="cardlink" href="w2_treemap_window.html"><b>W2</b> Treemap Window (last 8 steps)<br><span
+                class="small">env→traffic→noise • mean CO₂</span></a>
+        <a class="cardlink" href="w3_radial_dashboard.html"><b>W3</b> Step Bars Dashboard (per step)<br><span
+                class="small">easy intensity bars + real values</span></a>
+        <a class="cardlink" href="w4_rank_ribbons_steps.html"><b>W4</b> Rank Ribbons (per step)<br><span class="small">ranking evolves from step 1 to 66</span></a>
+    </div>
+
+    <div class="card small" style="margin-top:16px">
+        <b>Run locally:</b> in the folder containing <code>web/</code> and <code>data/</code>, run <code>python -m
+        http.server</code>, then open <code>http://localhost:8000/web/index.html</code>.
+    </div>
+</main>
+<div class="footer small">©️THE SIMPLIFIERS — Abu Bakkar Siddikk</div>
+</body>
+</html>
