@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>W3 — Sankey Diagram</title>
+<link rel="stylesheet" href="assets/style.css"/>
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="assets/app.js"></script></head>
+<body>
+<div class="wrap">
+<header>
+  <div class="title"><h1>W3 — Sankey Diagram</h1><p>Flow view linking <b>environment</b> → <b>traffic</b> → <b>CO₂ band</b> (low/mid/high).</p></div>
+  <div class="badges"><div class="badge" id="badge">Loading dataset…</div></div>
+</header>
+
+<div id="errorBox" class="card" style="display:none;border-color:rgba(251,113,133,0.35)"></div>
+
+<nav class="nav"><a class="" href="index.html">Dashboard</a>
+<a class="" href="w1_nightingale.html">W1 Nightingale</a>
+<a class="" href="w2_network.html">W2 Network</a>
+<a class="active" href="w3_sankey.html">W3 Sankey</a>
+<a class="" href="w4_rankribbons.html">W4 Rank Ribbons</a>
+<a class="" href="w5_treemap.html">W5 Treemap</a></nav>
+
+<div class="card"><div class="controls">
+  <div><label>Environment</label><select id="env"></select></div>
+  <div><label>Traffic</label><select id="traffic"></select></div>
+  <div><label>Start step</label><input id="start" type="range"/></div>
+  <div><label>End step <span class="small" id="rangeLabel" style="float:right"></span></label><input id="end" type="range"/></div>
+</div>
+<p class="small" style="margin:10px 0 0">CO₂ bands are computed from quantiles within the current selection.</p></div>
+
+<div class="section">
+  <h2>Visualization</h2>
+  <div class="card"><div id="plot" class="plot tall"></div></div>
+</div>
+
+<div class="footer">Variables used: <span class="code">step, env_type, vehicular_traffic, co2_ppm</span></div>
+</div>
+
+<script>(async function(){
+  await loadDataset();
+  const envSel=document.getElementById("env"), trSel=document.getElementById("traffic");
+  const sEl=document.getElementById("start"), eEl=document.getElementById("end"), lbl=document.getElementById("rangeLabel");
+  envSel.innerHTML=['<option>All</option>'].concat(uniq(APP.data.map(d=>d.env_type)).map(v=>`<option>${v}</option>`)).join("");
+  trSel.innerHTML=['<option>All</option>'].concat(uniq(APP.data.map(d=>d.vehicular_traffic)).map(v=>`<option>${v}</option>`)).join("");
+  sEl.min=APP.meta.minStep; sEl.max=APP.meta.maxStep; sEl.value=APP.meta.minStep;
+  eEl.min=APP.meta.minStep; eEl.max=APP.meta.maxStep; eEl.value=APP.meta.maxStep;
+  function render(){
+    let s=Number(sEl.value), e=Number(eEl.value);
+    if(s>e){ const t=s; s=e; e=t; sEl.value=s; eEl.value=e; }
+    lbl.textContent=`steps ${s}–${e}`;
+    const rows=applyFilters({env:envSel.value, traffic:trSel.value, s, e});
+    const co2=rows.map(r=>r.co2_ppm).filter(v=>v!==null).sort((a,b)=>a-b);
+    const q1=co2.length? quantile(co2,0.33):null, q2=co2.length? quantile(co2,0.66):null;
+    const band=(v)=>{ if(v===null||q1===null||q2===null) return "Unknown"; if(v<=q1) return "Low CO₂"; if(v<=q2) return "Mid CO₂"; return "High CO₂"; };
+    const envs2=uniq(rows.map(r=>r.env_type)), trfs2=uniq(rows.map(r=>r.vehicular_traffic)), bands=["Low CO₂","Mid CO₂","High CO₂","Unknown"];
+    const nodes=[...envs2,...trfs2,...bands]; const idx=Object.fromEntries(nodes.map((n,i)=>[n,i]));
+    const m1=new Map(), m2=new Map();
+    rows.forEach(r=>{ const k1=r.env_type+"||"+r.vehicular_traffic; m1.set(k1,(m1.get(k1)||0)+1);
+                      const k2=r.vehicular_traffic+"||"+band(r.co2_ppm); m2.set(k2,(m2.get(k2)||0)+1);});
+    const source=[], target=[], value=[];
+    for(const [k,c] of m1.entries()){ const [a,b]=k.split("||"); source.push(idx[a]); target.push(idx[b]); value.push(c); }
+    for(const [k,c] of m2.entries()){ const [a,b]=k.split("||"); source.push(idx[a]); target.push(idx[b]); value.push(c); }
+    Plotly.react("plot",[{type:"sankey",arrangement:"snap",
+      node:{pad:14,thickness:18,label:nodes,color:"rgba(255,255,255,0.18)",line:{color:"rgba(255,255,255,0.25)",width:1}},
+      link:{source,target,value,color:"rgba(125,211,252,0.22)"}}
+    ],{title:"Sankey — Environment → Traffic → CO₂ band",height:720,margin:{l:10,r:10,t:60,b:10},
+       paper_bgcolor:"rgba(0,0,0,0)",plot_bgcolor:"rgba(0,0,0,0)",font:{color:"rgba(245,248,255,0.92)"}},{responsive:true});
+  }
+  envSel.addEventListener("change",render); trSel.addEventListener("change",render);
+  sEl.addEventListener("input",render); eEl.addEventListener("input",render);
+  render();
+})();</script>
+</body>
+</html>

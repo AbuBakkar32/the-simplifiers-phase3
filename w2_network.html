@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>W2 — Network Diagram</title>
+<link rel="stylesheet" href="assets/style.css"/>
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="assets/app.js"></script></head>
+<body>
+<div class="wrap">
+<header>
+  <div class="title"><h1>W2 — Network Diagram</h1><p>Bipartite network linking <b>environment</b> and <b>traffic</b>. Shows co-occurrence patterns along the route.</p></div>
+  <div class="badges"><div class="badge" id="badge">Loading dataset…</div></div>
+</header>
+
+<div id="errorBox" class="card" style="display:none;border-color:rgba(251,113,133,0.35)"></div>
+
+<nav class="nav"><a class="" href="index.html">Dashboard</a>
+<a class="" href="w1_nightingale.html">W1 Nightingale</a>
+<a class="active" href="w2_network.html">W2 Network</a>
+<a class="" href="w3_sankey.html">W3 Sankey</a>
+<a class="" href="w4_rankribbons.html">W4 Rank Ribbons</a>
+<a class="" href="w5_treemap.html">W5 Treemap</a></nav>
+
+<div class="card"><div class="controls" style="grid-template-columns:1fr 1fr">
+  <div><label>Start step</label><input id="start" type="range"/></div>
+  <div><label>End step <span class="small" id="rangeLabel" style="float:right"></span></label><input id="end" type="range"/></div>
+</div>
+<p class="small" style="margin:10px 0 0">Link thickness = frequency; hover at mid-link hotspot to see mean CO₂.</p></div>
+
+<div class="section">
+  <h2>Visualization</h2>
+  <div class="card"><div id="plot" class="plot tall"></div></div>
+</div>
+
+<div class="footer">Variables used: <span class="code">step, env_type, vehicular_traffic, co2_ppm</span></div>
+</div>
+
+<script>(async function(){
+  await loadDataset();
+  const sEl=document.getElementById("start"), eEl=document.getElementById("end"), lbl=document.getElementById("rangeLabel");
+  sEl.min=APP.meta.minStep; sEl.max=APP.meta.maxStep; sEl.value=APP.meta.minStep;
+  eEl.min=APP.meta.minStep; eEl.max=APP.meta.maxStep; eEl.value=APP.meta.maxStep;
+  function render(){
+    let s=Number(sEl.value), e=Number(eEl.value);
+    if(s>e){ const t=s; s=e; e=t; sEl.value=s; eEl.value=e; }
+    lbl.textContent=`steps ${s}–${e}`;
+    const rows=applyFilters({s,e});
+    const envs=uniq(rows.map(r=>r.env_type));
+    const trfs=uniq(rows.map(r=>r.vehicular_traffic));
+    const edge=new Map();
+    rows.forEach(r=>{
+      const k=r.env_type+"||"+r.vehicular_traffic;
+      const cur=edge.get(k)||{count:0,sum:0,n:0};
+      cur.count += 1;
+      if(r.co2_ppm!==null){ cur.sum+=r.co2_ppm; cur.n+=1; }
+      edge.set(k, cur);
+    });
+    let maxCount=1; edge.forEach(v=>{if(v.count>maxCount) maxCount=v.count;});
+    const envY=envs.map((_,i)=> i/(Math.max(1,envs.length-1)));
+    const trfY=trfs.map((_,i)=> i/(Math.max(1,trfs.length-1)));
+    const envPos=Object.fromEntries(envs.map((k,i)=>[k,{x:0.12,y:1-envY[i]}]));
+    const trfPos=Object.fromEntries(trfs.map((k,i)=>[k,{x:0.88,y:1-trfY[i]}]));
+    const xLines=[], yLines=[], midX=[], midY=[], midText=[], midSize=[];
+    edge.forEach((v,k)=>{
+      const [a,b]=k.split("||"); const p=envPos[a], q=trfPos[b];
+      if(!p||!q) return;
+      xLines.push(p.x,q.x,null); yLines.push(p.y,q.y,null);
+      midX.push((p.x+q.x)/2); midY.push((p.y+q.y)/2);
+      const m=v.n? v.sum/v.n : null;
+      midText.push(`${a} → ${b}<br>Count: ${v.count}<br>${m!==null? "Mean CO₂: "+Math.round(m)+" ppm":""}<extra></extra>`);
+      midSize.push(6 + 18*(v.count/maxCount));
+    });
+    Plotly.react("plot",[
+      {type:"scatter",mode:"lines",x:xLines,y:yLines,hoverinfo:"skip",line:{width:1.5,color:"rgba(125,211,252,0.28)"}},
+      {type:"scatter",mode:"markers",x:midX,y:midY,hovertemplate:midText,showlegend:false,marker:{size:midSize,color:"rgba(255,255,255,0.00)"}},
+      {type:"scatter",mode:"markers+text",x:envs.map(k=>envPos[k].x),y:envs.map(k=>envPos[k].y),text:envs,textposition:"middle left",showlegend:false,
+       marker:{size:16,color:"rgba(255,255,255,0.26)",line:{color:"rgba(255,255,255,0.34)",width:1}}},
+      {type:"scatter",mode:"markers+text",x:trfs.map(k=>trfPos[k].x),y:trfs.map(k=>trfPos[k].y),text:trfs,textposition:"middle right",showlegend:false,
+       marker:{size:16,color:"rgba(255,255,255,0.18)",line:{color:"rgba(255,255,255,0.26)",width:1}}}
+    ],{
+      title:"Network — Environment ↔ Traffic (edge=count, hover=mean CO₂)",
+      height:720,margin:{l:20,r:20,t:60,b:20},
+      paper_bgcolor:"rgba(0,0,0,0)",plot_bgcolor:"rgba(0,0,0,0)",font:{color:"rgba(245,248,255,0.92)"},
+      xaxis:{visible:false,range:[0,1]},yaxis:{visible:false,range:[0,1]}
+    },{responsive:true});
+  }
+  sEl.addEventListener("input",render); eEl.addEventListener("input",render); render();
+})();</script>
+</body>
+</html>

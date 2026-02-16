@@ -1,55 +1,237 @@
 <!doctype html>
 <html lang="en">
-<head>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>THE SIMPLIFIERS — 4 Step-wise Animated Plots (Venice)</title>
-    <link rel="stylesheet" href="assets/style.css"/>
-    <style>
-        .grid {
-            display: grid;
-            grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
-            gap: 14px
-        }
-
-        .cardlink {
-            display: block;
-            padding: 14px;
-            border-radius: 14px;
-            border: 1px solid rgba(255, 255, 255, .14);
-            text-decoration: none
-        }
-
-        .cardlink:hover {
-            transform: translateY(-1px)
-        }
-
-        .small {
-            opacity: .9
-        }
-    </style>
-</head>
+<head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Venice Air Quality — Dashboard</title>
+<link rel="stylesheet" href="assets/style.css"/>
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="assets/app.js"></script></head>
 <body>
+<div class="wrap">
 <header>
-    <h1>THE SIMPLIFIERS — 4 Step-wise Animated Plots (Venice)</h1>
-    <h1 style="color: aquamarine">Abu Bakkar Siddikk-908592</h1>
-    <p class="small">All animations and sliders are <b>Step 1–66</b> (no segments). Clean for presentation.</p>
+  <div class="title">
+    <h1>Decision Dashboard — Venice Air Quality Walk</h1>
+    <p>Interactive HCI/Visualization web app. Filter by context and step range to understand patterns and decide where to investigate.</p>
+  </div>
+  <div class="badges">
+    <div class="badge" id="badge">Loading dataset…</div>
+    <div class="badge">HCI & Visualization</div>
+  </div>
 </header>
-<main>
-    <div class="grid">
-        <a class="cardlink" href="w1_3d_helix_route.html"><b>W1</b> 3D Helix Route Reveal<br><span class="small">step-by-step + rotating camera</span></a>
-        <a class="cardlink" href="w2_treemap_window.html"><b>W2</b> Treemap Window (last 8 steps)<br><span
-                class="small">env→traffic→noise • mean CO₂</span></a>
-        <a class="cardlink" href="w3_radial_dashboard.html"><b>W3</b> Step Bars Dashboard (per step)<br><span
-                class="small">easy intensity bars + real values</span></a>
-        <a class="cardlink" href="w4_rank_ribbons_steps.html"><b>W4</b> Rank Ribbons (per step)<br><span class="small">ranking evolves from step 1 to 66</span></a>
-    </div>
 
-    <div class="card small" style="margin-top:16px">
-        <b>Run locally:</b> in the folder containing <code>web/</code> and <code>data/</code>, run <code>python -m
-        http.server</code>, then open <code>http://localhost:8000/web/index.html</code>.
-    </div>
-</main>
-<div class="footer small">©️THE SIMPLIFIERS — Abu Bakkar Siddikk</div>
+<div id="errorBox" class="card" style="display:none;border-color:rgba(251,113,133,0.35)"></div>
+
+<nav class="nav"><a class="active" href="index.html">Dashboard</a>
+<a class="" href="w1_nightingale.html">W1 Nightingale</a>
+<a class="" href="w2_network.html">W2 Network</a>
+<a class="" href="w3_sankey.html">W3 Sankey</a>
+<a class="" href="w4_rankribbons.html">W4 Rank Ribbons</a>
+<a class="" href="w5_treemap.html">W5 Treemap</a></nav>
+
+<div class="card">
+  <div class="controls">
+    <div><label>Environment</label><select id="env"></select></div>
+    <div><label>Traffic</label><select id="traffic"></select></div>
+    <div><label>Start step</label><input id="start" type="range"/></div>
+    <div><label>End step <span class="small" id="rangeLabel" style="float:right"></span></label><input id="end" type="range"/></div>
+  </div>
+  <div class="btns" style="margin-top:10px">
+    <button id="resetBtn">Reset filters</button>
+    <button id="downloadBtn">Download filtered CSV</button>
+  </div>
+  <p class="small" style="margin:10px 0 0">Tip: Filter → check Top 5 peaks → inspect Sankey flow → open W1–W5 for deeper views.</p>
+</div>
+
+<div class="section">
+  <h2>At-a-glance KPIs</h2>
+  <p>Quick summary of the current filtered view.</p>
+  <div class="grid kpis">
+    <div class="card kpi" id="k1"></div>
+    <div class="card kpi" id="k2"></div>
+    <div class="card kpi" id="k3"></div>
+    <div class="card kpi" id="k4"></div>
+  </div>
+</div>
+
+<hr class="sep"/>
+
+<div class="section">
+  <h2>Trend & context</h2>
+  <p>CO₂ changes step-by-step and mean CO₂ by environment in the current selection.</p>
+  <div class="two">
+    <div class="card"><div id="plot_trend" class="plot"></div></div>
+    <div class="card"><div id="plot_env" class="plot"></div></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Context flow</h2>
+  <p>Environment → Traffic → CO₂ band (computed within the selection).</p>
+  <div class="card"><div id="plot_sankey" class="plot"></div></div>
+</div>
+
+<div class="section">
+  <h2>Where to investigate</h2>
+  <p>Top 5 CO₂ peaks in the current view.</p>
+  <div class="card">
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="color:rgba(235,242,255,0.70);text-align:left">
+          <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.10)">Step</th>
+          <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.10)">Place</th>
+          <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.10)">Time</th>
+          <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.10)">Env</th>
+          <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.10)">Traffic</th>
+          <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.10)">CO₂ (ppm)</th>
+        </tr>
+      </thead>
+      <tbody id="top5"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="footer">Dataset: <span class="code">data/dataset.csv</span> • Works on GitHub Pages and localhost.</div>
+</div>
+
+<script>
+function kpiCard(id, label, value, sub){
+  document.getElementById(id).innerHTML = `
+    <div class="label">${label}</div>
+    <div class="value">${value}</div>
+    <div class="sub">${sub}</div>`;
+}
+
+function renderDashboard(){
+  const envSel = document.getElementById("env");
+  const trSel = document.getElementById("traffic");
+  const sEl = document.getElementById("start");
+  const eEl = document.getElementById("end");
+  const rangeLabel = document.getElementById("rangeLabel");
+
+  const envs = uniq(APP.data.map(d=>d.env_type));
+  const trfs = uniq(APP.data.map(d=>d.vehicular_traffic));
+  envSel.innerHTML = ['<option>All</option>'].concat(envs.map(v=>`<option>${v}</option>`)).join("");
+  trSel.innerHTML = ['<option>All</option>'].concat(trfs.map(v=>`<option>${v}</option>`)).join("");
+
+  sEl.min = APP.meta.minStep; sEl.max=APP.meta.maxStep; sEl.value=APP.meta.minStep;
+  eEl.min = APP.meta.minStep; eEl.max=APP.meta.maxStep; eEl.value=APP.meta.maxStep;
+
+  function update(){
+    let s = Number(sEl.value), e = Number(eEl.value);
+    if(s>e){ const tmp=s; s=e; e=tmp; sEl.value=s; eEl.value=e; }
+    rangeLabel.textContent = `steps ${s}–${e}`;
+    const env = envSel.value, traffic = trSel.value;
+
+    const rows = applyFilters({env, traffic, s, e});
+
+    const co2 = rows.map(r=>r.co2_ppm).filter(v=>v!==null).sort((a,b)=>a-b);
+    const mean = co2.length ? (co2.reduce((a,b)=>a+b,0)/co2.length) : null;
+    const p90 = co2.length ? quantile(co2, 0.90) : null;
+    const mx = co2.length ? co2[co2.length-1] : null;
+
+    kpiCard("k1","Records in view", `${rows.length}`, `Filtered by env/traffic + step range`);
+    kpiCard("k2","Mean CO₂ (ppm)", mean? `${Math.round(mean)}` : "—", `Avg concentration in current view`);
+    kpiCard("k3","90th percentile CO₂", p90? `${Math.round(p90)}` : "—", `High-end typical level`);
+    kpiCard("k4","Max CO₂ (ppm)", mx? `${Math.round(mx)}` : "—", `Peak in current view`);
+
+    Plotly.react("plot_trend", [{
+      type:"scatter", mode:"lines+markers",
+      x: rows.map(r=>r.step), y: rows.map(r=>r.co2_ppm),
+      hovertemplate:"Step %{x}<br>CO₂ %{y} ppm<extra></extra>"
+    }], {
+      margin:{l:50,r:20,t:30,b:45},
+      height:520, title:"CO₂ trend across steps",
+      paper_bgcolor:"rgba(0,0,0,0)", plot_bgcolor:"rgba(0,0,0,0)",
+      xaxis:{title:"Step"}, yaxis:{title:"CO₂ (ppm)"},
+      font:{color:"rgba(245,248,255,0.92)"}
+    }, {responsive:true});
+
+    const byEnv = {};
+    rows.forEach(r=>{
+      if(r.co2_ppm===null) return;
+      byEnv[r.env_type]=byEnv[r.env_type]||{sum:0,n:0};
+      byEnv[r.env_type].sum += r.co2_ppm; byEnv[r.env_type].n += 1;
+    });
+    const envKeys = Object.keys(byEnv).sort();
+    const envMean = envKeys.map(k=>byEnv[k].sum/byEnv[k].n);
+    Plotly.react("plot_env", [{type:"bar", x: envKeys, y: envMean,
+      hovertemplate:"%{x}<br>Mean CO₂ %{y:.0f} ppm<extra></extra>"}], {
+      margin:{l:50,r:20,t:30,b:90}, height:520, title:"Mean CO₂ by environment (current view)",
+      paper_bgcolor:"rgba(0,0,0,0)", plot_bgcolor:"rgba(0,0,0,0)",
+      xaxis:{tickangle:-25}, yaxis:{title:"Mean CO₂ (ppm)"},
+      font:{color:"rgba(245,248,255,0.92)"}
+    }, {responsive:true});
+
+    const q1 = co2.length ? quantile(co2, 0.33) : null;
+    const q2 = co2.length ? quantile(co2, 0.66) : null;
+    const band = (v)=>{
+      if(v===null || q1===null || q2===null) return "Unknown";
+      if(v<=q1) return "Low CO₂";
+      if(v<=q2) return "Mid CO₂";
+      return "High CO₂";
+    };
+    const envs2 = uniq(rows.map(r=>r.env_type));
+    const trfs2 = uniq(rows.map(r=>r.vehicular_traffic));
+    const bands = ["Low CO₂","Mid CO₂","High CO₂","Unknown"];
+    const nodes = [...envs2, ...trfs2, ...bands];
+    const idx = Object.fromEntries(nodes.map((n,i)=>[n,i]));
+    const m1=new Map(), m2=new Map();
+    rows.forEach(r=>{
+      const k1=r.env_type+"||"+r.vehicular_traffic;
+      m1.set(k1,(m1.get(k1)||0)+1);
+      const k2=r.vehicular_traffic+"||"+band(r.co2_ppm);
+      m2.set(k2,(m2.get(k2)||0)+1);
+    });
+    const source=[], target=[], value=[];
+    for(const [k,c] of m1.entries()){
+      const [a,b]=k.split("||"); source.push(idx[a]); target.push(idx[b]); value.push(c);
+    }
+    for(const [k,c] of m2.entries()){
+      const [a,b]=k.split("||"); source.push(idx[a]); target.push(idx[b]); value.push(c);
+    }
+    Plotly.react("plot_sankey", [{
+      type:"sankey", arrangement:"snap",
+      node:{pad:14, thickness:18, label:nodes, color:"rgba(255,255,255,0.18)",
+            line:{color:"rgba(255,255,255,0.25)", width:1}},
+      link:{source,target,value, color:"rgba(125,211,252,0.22)"}
+    }], {
+      margin:{l:10,r:10,t:30,b:10}, height:520,
+      title:"Context flow (Environment → Traffic → CO₂ band)",
+      paper_bgcolor:"rgba(0,0,0,0)", plot_bgcolor:"rgba(0,0,0,0)",
+      font:{color:"rgba(245,248,255,0.92)"}
+    }, {responsive:true});
+
+    const spikes = rows.filter(r=>r.co2_ppm!==null).sort((a,b)=>b.co2_ppm-a.co2_ppm).slice(0,5);
+    document.getElementById("top5").innerHTML = spikes.map(r=>`
+      <tr>
+        <td>${r.step}</td>
+        <td>${(r.landmark||"").slice(0,42)}</td>
+        <td>${r.time||""}</td>
+        <td>${r.env_type}</td>
+        <td>${r.vehicular_traffic}</td>
+        <td>${r.co2_ppm!==null ? Math.round(r.co2_ppm) : ""}</td>
+      </tr>`).join("");
+
+    document.getElementById("downloadBtn").onclick = ()=>downloadCSV(rows, "venice_airquality_filtered.csv");
+    document.getElementById("resetBtn").onclick = ()=>{
+      envSel.value="All"; trSel.value="All";
+      sEl.value=APP.meta.minStep; eEl.value=APP.meta.maxStep;
+      update();
+    };
+  }
+
+  envSel.addEventListener("change", update);
+  trSel.addEventListener("change", update);
+  sEl.addEventListener("input", update);
+  eEl.addEventListener("input", update);
+  update();
+}
+
+(async function(){
+  await loadDataset();
+  renderDashboard();
+})();
+</script>
 </body>
 </html>

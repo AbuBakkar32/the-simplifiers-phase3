@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>W4 — Rank Ribbons</title>
+<link rel="stylesheet" href="assets/style.css"/>
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="assets/app.js"></script></head>
+<body>
+<div class="wrap">
+<header>
+  <div class="title"><h1>W4 — Rank Ribbons</h1><p>Bump chart ranking <b>environment types</b> by cumulative mean CO₂ as the route progresses.</p></div>
+  <div class="badges"><div class="badge" id="badge">Loading dataset…</div></div>
+</header>
+
+<div id="errorBox" class="card" style="display:none;border-color:rgba(251,113,133,0.35)"></div>
+
+<nav class="nav"><a class="" href="index.html">Dashboard</a>
+<a class="" href="w1_nightingale.html">W1 Nightingale</a>
+<a class="" href="w2_network.html">W2 Network</a>
+<a class="" href="w3_sankey.html">W3 Sankey</a>
+<a class="active" href="w4_rankribbons.html">W4 Rank Ribbons</a>
+<a class="" href="w5_treemap.html">W5 Treemap</a></nav>
+
+<div class="card"><label>Up to step <span class="small" id="lbl" style="float:right"></span></label>
+<input id="upto" type="range"/>
+<p class="small" style="margin:10px 0 0">Rank 1 = environment with highest cumulative mean CO₂ so far. Rank swaps indicate changing context.</p></div>
+
+<div class="section">
+  <h2>Visualization</h2>
+  <div class="card"><div id="plot" class="plot tall"></div></div>
+</div>
+
+<div class="footer">Variables used: <span class="code">step, env_type, co2_ppm</span></div>
+</div>
+
+<script>(async function(){
+  await loadDataset();
+  const range=document.getElementById("upto"), lbl=document.getElementById("lbl");
+  range.min=APP.meta.minStep; range.max=APP.meta.maxStep; range.value=APP.meta.maxStep;
+  function render(){
+    const upto=Number(range.value);
+    lbl.textContent=`Up to step: ${upto}`;
+    const rows=applyFilters({s:APP.meta.minStep,e:upto});
+    const envs=uniq(rows.map(r=>r.env_type));
+    const sum=Object.fromEntries(envs.map(e=>[e,0])), cnt=Object.fromEntries(envs.map(e=>[e,0]));
+    const steps=uniq(rows.map(r=>r.step)).map(Number).sort((a,b)=>a-b);
+    const series=Object.fromEntries(envs.map(e=>[e,[]])); const x=[];
+    for(const s of steps){
+      x.push(s);
+      rows.filter(r=>r.step===s).forEach(r=>{ if(r.co2_ppm!==null){ sum[r.env_type]+=r.co2_ppm; cnt[r.env_type]+=1; }});
+      const means=envs.map(e=>({e,m:cnt[e]?sum[e]/cnt[e]:-1e9})).sort((a,b)=>b.m-a.m);
+      const rank=Object.fromEntries(means.map((d,i)=>[d.e,i+1]));
+      envs.forEach(e=>series[e].push(rank[e]));
+    }
+    const traces=envs.map(e=>({type:"scatter",mode:"lines+markers",name:e,x,y:series[e],
+      hovertemplate:`Env: ${e}<br>Step %{x}<br>Rank %{y}<extra></extra>`}));
+    Plotly.react("plot",traces,{title:"Rank Ribbons — env_type ranked by cumulative mean CO₂",height:720,margin:{l:60,r:20,t:60,b:60},
+      paper_bgcolor:"rgba(0,0,0,0)",plot_bgcolor:"rgba(0,0,0,0)",font:{color:"rgba(245,248,255,0.92)"},
+      xaxis:{title:"Step"},yaxis:{title:"Rank (1 = highest CO₂)",autorange:"reversed",dtick:1},legend:{orientation:"h"}},{responsive:true});
+  }
+  range.addEventListener("input",render); render();
+})();</script>
+</body>
+</html>

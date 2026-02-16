@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>W5 — Treemap Window</title>
+<link rel="stylesheet" href="assets/style.css"/>
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="assets/app.js"></script></head>
+<body>
+<div class="wrap">
+<header>
+  <div class="title"><h1>W5 — Treemap Window</h1><p>Hierarchical windowed view of <b>environment → traffic → noise</b> within a step window; tile size = frequency, color = mean CO₂.</p></div>
+  <div class="badges"><div class="badge" id="badge">Loading dataset…</div></div>
+</header>
+
+<div id="errorBox" class="card" style="display:none;border-color:rgba(251,113,133,0.35)"></div>
+
+<nav class="nav"><a class="" href="index.html">Dashboard</a>
+<a class="" href="w1_nightingale.html">W1 Nightingale</a>
+<a class="" href="w2_network.html">W2 Network</a>
+<a class="" href="w3_sankey.html">W3 Sankey</a>
+<a class="" href="w4_rankribbons.html">W4 Rank Ribbons</a>
+<a class="active" href="w5_treemap.html">W5 Treemap</a></nav>
+
+<div class="card"><div class="controls" style="grid-template-columns:1fr 1fr">
+  <div><label>End step <span class="small" id="lbl" style="float:right"></span></label><input id="end" type="range"/></div>
+  <div><label>Window size</label><input id="win" type="range" min="3" max="25" step="1"/></div>
+</div>
+<p class="small" style="margin:10px 0 0">Tile size = frequency; color = mean CO₂. Click to zoom into sub-contexts.</p></div>
+
+<div class="section">
+  <h2>Visualization</h2>
+  <div class="card"><div id="plot" class="plot tall"></div></div>
+</div>
+
+<div class="footer">Variables used: <span class="code">step, env_type, vehicular_traffic, noise_level, co2_ppm</span></div>
+</div>
+
+<script>(async function(){
+  await loadDataset();
+  const end=document.getElementById("end"), win=document.getElementById("win"), lbl=document.getElementById("lbl");
+  end.min=APP.meta.minStep; end.max=APP.meta.maxStep; end.value=APP.meta.maxStep;
+  win.value=10;
+  function render(){
+    const e=Number(end.value), w=Number(win.value);
+    const s0=Math.max(APP.meta.minStep, e-w+1);
+    lbl.textContent=`Window: steps ${s0}–${e} (size ${w})`;
+    const rows=APP.data.filter(r=>r.step>=s0 && r.step<=e);
+    const leaf=new Map();
+    rows.forEach(r=>{
+      const key=r.env_type+"||"+r.vehicular_traffic+"||"+r.noise_level;
+      const cur=leaf.get(key)||{count:0,sum:0,n:0, env:r.env_type, trf:r.vehicular_traffic, noise:r.noise_level};
+      cur.count+=1; if(r.co2_ppm!==null){cur.sum+=r.co2_ppm; cur.n+=1;}
+      leaf.set(key,cur);
+    });
+    const labels=["All"], parents=[""], values=[rows.length], colors=[null], hover=[`Records: ${rows.length}<extra></extra>`];
+    const envs=uniq(rows.map(r=>r.env_type));
+    envs.forEach(env=>{
+      const sub=rows.filter(r=>r.env_type===env);
+      const c=sub.map(r=>r.co2_ppm).filter(v=>v!==null);
+      const m=c.length? c.reduce((a,b)=>a+b,0)/c.length : null;
+      labels.push(env); parents.push("All"); values.push(sub.length); colors.push(m);
+      hover.push(`${env}<br>Records: ${sub.length}<br>${m!==null? "Mean CO₂: "+Math.round(m)+" ppm":""}<extra></extra>`);
+    });
+    envs.forEach(env=>{
+      const trfs=uniq(rows.filter(r=>r.env_type===env).map(r=>r.vehicular_traffic));
+      trfs.forEach(trf=>{
+        const sub=rows.filter(r=>r.env_type===env && r.vehicular_traffic===trf);
+        const c=sub.map(r=>r.co2_ppm).filter(v=>v!==null);
+        const m=c.length? c.reduce((a,b)=>a+b,0)/c.length : null;
+        const node=`${env} • ${trf}`;
+        labels.push(node); parents.push(env); values.push(sub.length); colors.push(m);
+        hover.push(`${env} → ${trf}<br>Records: ${sub.length}<br>${m!==null? "Mean CO₂: "+Math.round(m)+" ppm":""}<extra></extra>`);
+      });
+    });
+    leaf.forEach(v=>{
+      const parent=`${v.env} • ${v.trf}`;
+      const m=v.n? v.sum/v.n : null;
+      labels.push(`${v.env} • ${v.trf} • ${v.noise}`); parents.push(parent); values.push(v.count); colors.push(m);
+      hover.push(`${v.env} → ${v.trf} → ${v.noise}<br>Count: ${v.count}<br>${m!==null? "Mean CO₂: "+Math.round(m)+" ppm":""}<extra></extra>`);
+    });
+    Plotly.react("plot",[{type:"treemap",labels,parents,values,marker:{colors:colors,colorscale:"Turbo",showscale:true},hovertemplate:hover}],
+      {title:"Treemap Window — env → traffic → noise (color = mean CO₂)",height:760,margin:{l:10,r:10,t:60,b:10},
+       paper_bgcolor:"rgba(0,0,0,0)",plot_bgcolor:"rgba(0,0,0,0)",font:{color:"rgba(245,248,255,0.92)"}},{responsive:true});
+  }
+  end.addEventListener("input",render); win.addEventListener("input",render); render();
+})();</script>
+</body>
+</html>
